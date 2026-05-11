@@ -8,10 +8,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Root route for Elastic Beanstalk health check
+app.get("/", (req, res) => {
+  res.send("Docker App Running Successfully");
+});
+
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  password: process.env.DB_PASS,
   database: process.env.DB_NAME,
 });
 
@@ -62,6 +67,9 @@ app.delete("/api/users/:id", (req, res) => {
   );
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
+// IMPORTANT FOR ELASTIC BEANSTALK
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
