@@ -2,14 +2,11 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "eu-north-1"
-        EB_APP_NAME = "docker-app"
-        EB_ENV_NAME = "Docker-app-env"
-        S3_BUCKET = "elasticbeanstalk-eu-north-1-936506757750"
-    }
-
-    tools {
-        nodejs 'node20'
+        APP_NAME = "docker-app"
+        ENV_NAME = "Docker-app-env"
+        S3_BUCKET = "3tier-frontend-vivek"
+        VERSION = "v-${BUILD_NUMBER}"
+        ZIP_FILE = "app.zip"
     }
 
     stages {
@@ -44,40 +41,41 @@ pipeline {
             }
         }
 
-        stage('Package Backend') {
+        stage('Package Application') {
             steps {
-                dir('backend') {
-                    sh 'zip -r app.zip .'
-                }
+                sh '''
+                rm -rf app.zip
+                zip -r app.zip backend frontend
+                '''
+            }
+        }
+
+        stage('Upload to S3') {
+            steps {
+                sh '''
+                aws s3 cp app.zip s3://$S3_BUCKET/$ZIP_FILE
+                '''
+            }
+        }
+
+        stage('Create EB Application Version') {
+            steps {
+                sh '''
+                aws elasticbeanstalk create-application-version \
+                    --application-name $APP_NAME \
+                    --version-label $VERSION \
+                    --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
+                '''
             }
         }
 
         stage('Deploy to Elastic Beanstalk') {
             steps {
-                dir('backend') {
-                    sh '''
-                    echo "Uploading artifact to S3..."
-
-                    aws s3 cp app.zip s3://$S3_BUCKET/app.zip
-
-                    VERSION=app-${BUILD_NUMBER}
-
-                    echo "Creating EB application version: $VERSION"
-
-                    aws elasticbeanstalk create-application-version \
-                      --application-name $EB_APP_NAME \
-                      --version-label $VERSION \
-                      --source-bundle S3Bucket=$S3_BUCKET,S3Key=app.zip \
-                      --region $AWS_REGION
-
-                    echo "Updating environment..."
-
-                    aws elasticbeanstalk update-environment \
-                      --environment-name $EB_ENV_NAME \
-                      --version-label $VERSION \
-                      --region $AWS_REGION
-                    '''
-                }
+                sh '''
+                aws elasticbeanstalk update-environment \
+                    --environment-name $ENV_NAME \
+                    --version-label $VERSION
+                '''
             }
         }
     }
