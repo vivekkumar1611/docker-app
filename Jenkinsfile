@@ -1,66 +1,54 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs "node20"
+    }
+
     environment {
-        AWS_REGION = 'eu-north-1'
-        ECR_REGISTRY = '936506757750.dkr.ecr.eu-north-1.amazonaws.com'
-        BACKEND_IMAGE = 'docker-app'
-        FRONTEND_IMAGE = 'frontend-app'
+        AWS_DEFAULT_REGION = 'eu-north-1'
     }
 
     stages {
 
-        stage('Clone Repo') {
+        stage('Clone Repository') {
             steps {
-                git branch: 'main',
-                url: 'https://github.com/vivekkumar1611/docker-app.git'
+                checkout scm
             }
         }
 
-        stage('Build Backend Image') {
+        stage('Backend Install') {
             steps {
-                sh '''
-                docker build -t $BACKEND_IMAGE:latest ./backend
-                docker tag $BACKEND_IMAGE:latest $ECR_REGISTRY/$BACKEND_IMAGE:latest
-                '''
+                dir('backend') {
+                    sh 'npm install'
+                }
             }
         }
 
-        stage('Build Frontend Image') {
+        stage('Frontend Install') {
             steps {
-                sh '''
-                docker build -t $FRONTEND_IMAGE:latest ./frontend
-                docker tag $FRONTEND_IMAGE:latest $ECR_REGISTRY/$FRONTEND_IMAGE:latest
-                '''
+                dir('frontend') {
+                    sh 'npm install'
+                }
             }
         }
 
-        stage('Login to ECR') {
+        stage('Build Frontend') {
             steps {
-                sh '''
-                export AWS_PAGER=""
-                aws ecr get-login-password --region $AWS_REGION | \
-                docker login --username AWS --password-stdin $ECR_REGISTRY
-                '''
+                dir('frontend') {
+                    sh 'npm run build'
+                }
             }
         }
 
-        stage('Push Images') {
+        stage('Deploy Backend') {
             steps {
-                sh '''
-                docker push $ECR_REGISTRY/$BACKEND_IMAGE:latest
-                docker push $ECR_REGISTRY/$FRONTEND_IMAGE:latest
-                '''
-            }
-        }
-
-        stage('Deploy to EKS') {
-            steps {
-                sh '''
-                export AWS_PAGER=""
-                kubectl rollout restart deployment backend
-                kubectl rollout restart deployment frontend
-                '''
+                dir('backend') {
+                    sh '''
+                    eb use Docker-app-env
+                    eb deploy
+                    '''
+                }
             }
         }
     }
